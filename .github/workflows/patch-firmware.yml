@@ -32,13 +32,13 @@ jobs:
       run: |
         # 1. 解压 .img.gz 文件
         gunzip istoreos_original.img.gz
-        
-        # 2. 查找 rootfs 分区的起始扇区，并计算偏移量
+
+        # 2. 查找 rootfs 分区的起始扇区，并计算偏移量（此处添加 sudo）
         ROOTFS_START=$(sudo fdisk -l istoreos_original.img | grep Linux | tail -1 | awk '{print $2 * 512}')
-        
+
         # 3. 挂载根文件系统
         sudo mount -o loop,offset=$ROOTFS_START istoreos_original.img /mnt
-        
+
         echo "mount_dir=/mnt" >> $GITHUB_OUTPUT
 
     - name: 🩹 注入 R2C Plus 修复脚本和 ethtool
