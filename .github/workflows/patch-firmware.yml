@@ -25,7 +25,7 @@ jobs:
         FIRMWARE_URL="https://fw.koolcenter.com/iStoreOS/rockchip/istoreos-rockchip-friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz"
         FIRMWARE_FILE="r2s_original.img.gz"
         curl -L -o $FIRMWARE_FILE $FIRMWARE_URL
-        echo "::set-output name=file::${FIRMWARE_FILE}"
+        echo "file=${FIRMWARE_FILE}" >> $GITHUB_OUTPUT
 
     - name: 🗜️ 解压固件并挂载根文件系统
       id: unpack
@@ -36,8 +36,8 @@ jobs:
         # 2. 查找并挂载 rootfs (通常是最后一个分区)
         ROOTFS_START=$(fdisk -l r2s_original.img | grep Linux | awk '{print $2 * 512}')
         sudo mount -o loop,offset=$ROOTFS_START r2s_original.img /mnt
-        
-        echo "::set-output name=mount_dir::/mnt"
+
+        echo "mount_dir=/mnt" >> $GITHUB_OUTPUT
 
     - name: 🩹 注入 R2C Plus 修复脚本和 ethtool
       run: |
