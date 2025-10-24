@@ -27,9 +27,7 @@ jobs:
         curl -L -o $FIRMWARE_FILE $FIRMWARE_URL
         echo "file=${FIRMWARE_FILE}" >> $GITHUB_OUTPUT
 
-        
-
-- name: 🗜️ 解压固件并挂载根文件系统
+    - name: 🗜️ 解压固件并挂载根文件系统
       id: unpack
       run: |
         # 1. 解压 .img.gz 文件
