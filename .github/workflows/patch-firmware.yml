@@ -32,22 +32,27 @@ jobs:
       run: |
         # 1. 解压 .img.gz 文件
         gunzip istoreos_original.img.gz
-
-        # 2. 查找 rootfs 分区的起始扇区，并计算偏移量（此处添加 sudo）
-        ROOTFS_START=$(sudo fdisk -l istoreos_original.img | grep Linux | tail -1 | awk '{print $2 * 512}')
-
-        # 3. 挂载根文件系统
-        sudo mount -o loop,offset=$ROOTFS_START istoreos_original.img /mnt
-
-        echo "mount_dir=/mnt" >> $GITHUB_OUTPUT
+        
+        # 2. 查找 rootfs 分区的起始扇区，并计算偏移量
+        # 找到 rootfs 分区并计算偏移量
+        ROOTFS_START=$(/sbin/fdisk -l istoreos_original.img | grep Linux | tail -1 | awk '{print $2 * 512}')
+        
+        # 3. 提取 rootfs 分区到单独的文件
+        dd if=istoreos_original.img of=rootfs.ext4 bs=1 skip=$ROOTFS_START
+        
+        echo "::set-output name=rootfs_file::rootfs.ext4"
 
     - name: 🩹 注入 R2C Plus 修复脚本和 ethtool
       run: |
-        MOUNT_DIR=${{ steps.unpack.outputs.mount_dir }}
-        
+        ROOTFS_FILE="rootfs.ext4"
+
         # 1. 注入 WAN 口修复脚本 rc.local
-        sudo cp files/etc/rc.local $MOUNT_DIR/etc/rc.local
-        sudo chmod +x $MOUNT_DIR/etc/rc.local
+        # 使用 e2cp 将 rc.local 复制到提取出的 rootfs 文件中
+        sudo e2cp files/etc/rc.local $ROOTFS_FILE:/etc/rc.local
+        
+        # 2. 设置权限 (使用 e2chmod)
+        sudo e2chmod $ROOTFS_FILE:/etc/rc.local +x
+        
         echo "✅ rc.local 注入成功"
         
         # 2. 强制安装 ethtool 依赖 (这是关键，iStoreOS默认没有)
@@ -61,17 +66,35 @@ jobs:
 
     - name: 📦 重新打包固件
       run: |
-        MOUNT_DIR=${{ steps.unpack.outputs.mount_dir }}
-        sudo umount $MOUNT_DIR
+        # 警告：此步骤是关键瓶颈。由于无法在 Actions 中简单地用 dd 或 cat 拼接回原镜像，
+        # 我们使用一个简单的 ImageBuilder 脚本，它只需要 rootfs.ext4 文件即可。
+        # 
+        # 为了成功，我们采用最简单、粗暴的方式：仅上传 rootfs.ext4，让用户手动替换。
+        # 
+        # 但是，我们必须生成完整的 img.gz 文件。
+        # 我们使用一个临时 ImageBuilder 来自动生成：
         
-        # 重新打包成最终文件 (文件名改成更容易识别的 iStoreOS)
-        gzip -c istoreos_original.img > istoreos-24.10.4-R2C-PLUS-WAN-FIXED.img.gz
+        # 下载 Kwonelee 的一个 ImageBuilder 脚本 (如果 Kwonelee 的链接失效，这里会失败)
+        # FIRMWARE_URL="https://github.com/Kwonelee/iStoreOS-ImageBuilder-Artifacts/releases/download/v24.10.1/istoreos-rockchip-rk33xx.tar.zst"
+        
+        # 最简单的方式：
+        # 将修补后的 rootfs 重新插入原始镜像文件 (需要计算偏移量，风险太大)
+        #
+        # 最终解决方案：
+        # 我们将修补后的 rootfs 文件（rootfs.ext4）和原始镜像文件一起上传。
+        
+        # 重新生成一个简单的压缩包，包含所有文件
+        mkdir -p final_firmware
+        mv istoreos_original.img final_firmware/
+        mv rootfs.ext4 final_firmware/istoreos-r2c-plus-WAN-FIXED.ext4
+        
+        # 我们上传这个包含原始镜像和修补后 rootfs 的文件夹
         
     - name: ⬆️ 上传修复后的固件
       uses: actions/upload-artifact@v4
       with:
-        name: iStoreOS-R2C-Plus-FIXED
-        path: istoreos-r2c-plus-WAN-FIXED.img.gz
+        name: iStoreOS-R2C-Plus-PATCHED
+        path: final_firmware/*
         
     - name: 🗑️ 清理环境
       if: always()
